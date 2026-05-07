@@ -16,7 +16,6 @@
             text-decoration: none !important;
             color: yellow !important;
             font-weight: 700 !important;
-            
             padding-bottom: 4px !important;
             margin-bottom: -4px !important;
         }
