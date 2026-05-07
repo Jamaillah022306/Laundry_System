@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Receipt - {{ $payment->payment_id }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+        .receipt {
+            background: white;
+            width: 420px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            overflow: hidden;
+        }
+        .receipt-header {
+            background: #4a90d9;
+            padding: 30px 25px;
+            text-align: center;
+            color: white;
+        }
+        .receipt-header img {
+            height: 70px;
+            margin-bottom: 10px;
+        }
+        .receipt-header h1 {
+            font-size: 22px;
+            font-weight: 900;
+            letter-spacing: 1px;
+        }
+        .receipt-header p {
+            font-size: 13px;
+            opacity: 0.85;
+            margin-top: 4px;
+        }
+        .receipt-badge {
+            background: #2ecc71;
+            color: #1a1a2e;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 6px 18px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-top: 12px;
+            letter-spacing: 1px;
+        }
+        .receipt-body {
+            padding: 25px;
+        }
+        .receipt-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 14px;
+        }
+        .receipt-row:last-child { border-bottom: none; }
+        .receipt-row .label {
+            color: #666;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 12px;
+            min-width: 130px;
+        }
+        .receipt-row .value {
+            color: #1a1a2e;
+            font-weight: 600;
+            text-align: right;
+        }
+        .receipt-total {
+            background: #f5e642;
+            margin: 0 25px 25px 25px;
+            border-radius: 10px;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .receipt-total .label {
+            font-size: 16px;
+            font-weight: 800;
+            color: #1a1a2e;
+            text-transform: uppercase;
+        }
+        .receipt-total .amount {
+            font-size: 26px;
+            font-weight: 900;
+            color: #1a1a2e;
+        }
+        .receipt-footer {
+            background: #4a90d9;
+            padding: 18px 25px;
+            text-align: center;
+            color: white;
+            font-size: 13px;
+        }
+        .receipt-footer p { opacity: 0.9; line-height: 1.6; }
+        .print-btn {
+            display: block;
+            width: 420px;
+            margin: 20px auto 0;
+            background: #4a90d9;
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .print-btn:hover { background: #2563b8; }
+        @media print {
+            body { background: white; padding: 0; }
+            .receipt { box-shadow: none; border-radius: 0; width: 100%; }
+            .print-btn { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div>
+    <div class="receipt">
+        <!-- HEADER -->
+        <div class="receipt-header">
+            <img src="{{ asset('images/Bubble_Bee_Laundry_logo_design-removebg-preview.png') }}" alt="Bubble Bee Laundry">
+            <h1>BUBBLE BEE LAUNDRY</h1>
+            <p>Official Payment Receipt</p>
+            <span class="receipt-badge">✓ PAID</span>
+        </div>
+
+        <!-- BODY -->
+        <div class="receipt-body">
+            <div class="receipt-row">
+                <span class="label">Receipt No.</span>
+                <span class="value">{{ $payment->payment_id }}</span>
+            </div>
+            <div class="receipt-row">
+                <span class="label">Order ID</span>
+                <span class="value">{{ $payment->order_id }}</span>
+            </div>
+            <div class="receipt-row">
+                <span class="label">Customer</span>
+                <span class="value">{{ $payment->order->customer_name ?? 'N/A' }}</span>
+            </div>
+            <div class="receipt-row">
+                <span class="label">Service</span>
+                <span class="value">{{ $payment->order->service ?? 'N/A' }}</span>
+            </div>
+            <div class="receipt-row">
+                <span class="label">Weight</span>
+                <span class="value">{{ $payment->order->weight ?? 'N/A' }} kg</span>
+            </div>
+            <div class="receipt-row">
+                <span class="label">Payment Method</span>
+                <span class="value">{{ ucfirst($payment->method) }}</span>
+            </div>
+            @if($payment->reference_number)
+            <div class="receipt-row">
+                <span class="label">Reference No.</span>
+                <span class="value">{{ $payment->reference_number }}</span>
+            </div>
+            @endif
+            <div class="receipt-row">
+                <span class="label">Date Paid</span>
+                <span class="value">{{ \Carbon\Carbon::parse($payment->updated_at)->format('M d, Y h:i A') }}</span>
+            </div>
+        </div>
+
+        <!-- TOTAL -->
+        <div class="receipt-total">
+            <span class="label">Total Amount</span>
+            <span class="amount">₱{{ number_format($payment->amount, 2) }}</span>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="receipt-footer">
+            <p>Thank you for choosing Bubble Bee Laundry!<br>
+            Please keep this receipt for your records.</p>
+        </div>
+    </div>
+
+    <button class="print-btn" onclick="window.print()">Print Receipt</button>
+</div>
+
+</body>
+</html>
