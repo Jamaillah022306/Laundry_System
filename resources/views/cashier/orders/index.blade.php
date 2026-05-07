@@ -93,7 +93,10 @@
                     </td>
                     <td>{{ \Carbon\Carbon::parse($order->pickup_date)->format('M d, Y') }}</td>
                     <td style="display:flex; gap:6px; flex-wrap:wrap;">
-                        @if($order->status === 'claimed')
+
+                        @if($order->status === 'claimed' && !$order->customer_id)
+                            {{-- Walk-in claimed: one click Claimed & Complete --}}
+                            <a href="{{ route('cashier.orders.show', $order->order_id) }}" class="btn-action">View</a>
                             <form method="POST" action="{{ route('cashier.orders.complete', $order->order_id) }}">
                                 @csrf
                                 <button type="submit" class="btn-action"
@@ -102,7 +105,21 @@
                                     Complete
                                 </button>
                             </form>
+
+                        @elseif($order->status === 'claimed' && $order->customer_id)
+                            {{-- Registered customer claimed: show View + Complete --}}
+                            <a href="{{ route('cashier.orders.show', $order->order_id) }}" class="btn-action">View</a>
+                            <form method="POST" action="{{ route('cashier.orders.complete', $order->order_id) }}">
+                                @csrf
+                                <button type="submit" class="btn-action"
+                                    style="background:#27ae60;"
+                                    onclick="return confirm('Mark {{ $order->order_id }} as completed?')">
+                                    Complete
+                                </button>
+                            </form>
+
                         @elseif(in_array($order->status, ['completed', 'cancelled']))
+                            {{-- Completed/Cancelled: View + Archive --}}
                             <a href="{{ route('cashier.orders.show', $order->order_id) }}" class="btn-action">View</a>
                             <form method="POST" action="{{ route('cashier.orders.archive', $order->order_id) }}">
                                 @csrf
@@ -112,15 +129,29 @@
                                     Archive
                                 </button>
                             </form>
-                        @else
+
+                        @elseif($order->status === 'ready' && !$order->customer_id)
+                            {{-- Walk-in ready: show Claimed & Complete button --}}
                             <a href="{{ route('cashier.orders.show', $order->order_id) }}" class="btn-action">View</a>
-                            {{-- UPDATE STATUS BUTTON --}}
+                            <form method="POST" action="{{ route('cashier.orders.complete', $order->order_id) }}"
+                                onsubmit="return confirm('Mark {{ $order->order_id }} as Claimed & Completed?')">
+                                @csrf
+                                {{-- We need to set claimed first then complete, use a dedicated route or just complete directly --}}
+                                <button type="submit" class="btn-action" style="background:#27ae60;">
+                                    ✅ Done
+                                </button>
+                            </form>
+
+                        @else
+                            {{-- All other statuses: View + Update Status --}}
+                            <a href="{{ route('cashier.orders.show', $order->order_id) }}" class="btn-action">View</a>
                             <button type="button" class="btn-action"
                                 style="background:#f39c12;"
                                 onclick="openModal('{{ $order->order_id }}')">
                                 Update Status
                             </button>
                         @endif
+
                     </td>
                 </tr>
             @empty
@@ -164,7 +195,6 @@ function openModal(orderId) {
     document.getElementById('modalOrderId').textContent = orderId;
     document.getElementById('modalOrderIdInput').value = orderId;
 
-    // Reset dropdowns when opening modal
     document.getElementById('statusSelect').value = '';
     document.getElementById('machineSelect').value = '';
     filterMachines('');
@@ -177,29 +207,24 @@ function closeModal() {
     document.getElementById('statusModal').style.display = 'none';
 }
 
-// Close modal if clicked outside
 document.getElementById('statusModal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
 });
 
-// Filter machines based on selected status
 function filterMachines(status) {
     const machineSelect = document.getElementById('machineSelect');
     const machineHint   = document.getElementById('machineHint');
     const machineLabel  = document.getElementById('machineLabel');
     const options       = machineSelect.querySelectorAll('option');
 
-    // Reset selection
     machineSelect.value = '';
 
     if (status === 'washing') {
-        // Show washers only, hide dryers
         options.forEach(opt => {
             if (!opt.value) return;
             const type    = opt.getAttribute('data-type');
             const mStatus = opt.getAttribute('data-status');
             opt.style.display = (type === 'washer') ? '' : 'none';
-            // Disable if not available
             opt.disabled = (mStatus !== 'available');
         });
         machineHint.textContent = 'Only washers are shown for Washing status.';
@@ -207,13 +232,11 @@ function filterMachines(status) {
         machineLabel.textContent = '(select a washer)';
 
     } else if (status === 'drying') {
-        // Show dryers only, hide washers
         options.forEach(opt => {
             if (!opt.value) return;
             const type    = opt.getAttribute('data-type');
             const mStatus = opt.getAttribute('data-status');
             opt.style.display = (type === 'dryer') ? '' : 'none';
-            // Disable if not available
             opt.disabled = (mStatus !== 'available');
         });
         machineHint.textContent = 'Only dryers are shown for Drying status.';
@@ -221,7 +244,6 @@ function filterMachines(status) {
         machineLabel.textContent = '(select a dryer)';
 
     } else {
-        // Show all machines for other statuses
         options.forEach(opt => {
             if (!opt.value) return;
             opt.style.display = '';

@@ -549,7 +549,7 @@ class CashierController extends Controller
     {
         $order = DB::selectOne("SELECT * FROM orders WHERE order_id = ?", [$id]);
         abort_if(!$order, 404);
-        abort_if($order->status !== 'claimed', 403, 'Order is not claimed yet.');
+        abort_if(!in_array($order->status, ['claimed', 'ready']), 403, 'Order cannot be completed yet.');
 
         DB::update(
             "UPDATE orders SET status = 'completed', updated_at = NOW() WHERE order_id = ?",
