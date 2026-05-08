@@ -72,7 +72,7 @@
             @csrf
             <button type="submit" class="btn-primary" style="background:#22c55e; border:none; cursor:pointer;"
                 onclick="return confirm('Mark {{ $order->order_id }} as Completed?')">
-                ✅ Mark as Complete
+                Mark as Complete
             </button>
         </form>
         @endif

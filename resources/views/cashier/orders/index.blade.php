@@ -25,8 +25,6 @@
                     <option value="washing">Washing</option>
                     <option value="drying">Drying</option>
                     <option value="ready">Ready to Pick Up</option>
-                    <option value="claimed">Claimed</option>
-                    <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
                 </select>
             </div>
@@ -138,7 +136,7 @@
                                 @csrf
                                 {{-- We need to set claimed first then complete, use a dedicated route or just complete directly --}}
                                 <button type="submit" class="btn-action" style="background:#27ae60;">
-                                    ✅ Done
+                                    Done
                                 </button>
                             </form>
 
