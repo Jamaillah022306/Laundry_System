@@ -484,15 +484,14 @@ class CashierController extends Controller
         $year  = now()->year;
 
         $salesSummary = DB::select(
-            "SELECT DATE(p.created_at) as date,
-                    COUNT(p.id) as total_orders,
+            "SELECT DATE(o.created_at) as date,
+                    COUNT(o.id) as total_orders,
                     SUM(CASE WHEN o.status IN ('completed', 'archived') THEN 1 ELSE 0 END) as completed,
-                    SUM(p.amount) as revenue
-             FROM payments p
-             JOIN orders o ON p.order_id = o.order_id
-             WHERE p.status = 'paid'
-             GROUP BY DATE(p.created_at)
-             ORDER BY DATE(p.created_at) DESC"
+                    COALESCE(SUM(p.amount), 0) as revenue
+             FROM orders o
+             LEFT JOIN payments p ON o.order_id = p.order_id AND p.status = 'paid'
+             GROUP BY DATE(o.created_at)
+             ORDER BY DATE(o.created_at) DESC"
         );
 
         $topServices = DB::select(
@@ -528,7 +527,7 @@ class CashierController extends Controller
 
         $totalOrders = DB::selectOne("SELECT COUNT(*) as total FROM orders")->total;
 
-        
+        // ✅ FIXED: Include 'archived' orders in completed count
         $completed = DB::selectOne(
             "SELECT COUNT(*) as total FROM orders WHERE status IN ('completed', 'archived')"
         )->total;
