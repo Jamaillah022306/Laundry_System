@@ -65,16 +65,6 @@
                 Mark as Complete
             </button>
         </form>
-
-        {{-- Walk-in: ready → Done (one click complete) --}}
-        @elseif($order->status === 'ready' && !$order->customer_id)
-        <form method="POST" action="{{ route('cashier.orders.complete', $order->order_id) }}">
-            @csrf
-            <button type="submit" class="btn-primary" style="background:#22c55e; border:none; cursor:pointer;"
-                onclick="return confirm('Mark {{ $order->order_id }} as Done (Completed)?')">
-                Done
-            </button>
-        </form>
         @endif
 
     </div>
