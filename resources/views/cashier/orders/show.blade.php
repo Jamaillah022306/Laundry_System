@@ -33,20 +33,10 @@
         <span>₱{{ number_format($order->amount, 2) }}</span>
     </div>
 
-    {{-- Colored Status --}}
+    {{-- Colored Status — matching app.css --}}
     <div style="display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.2);">
         <span style="font-weight:700; color:#1a1a2e;">Status</span>
-        <span style="font-weight:700;
-            color:
-            @if($order->status === 'claimed') #f59e0b
-            @elseif($order->status === 'completed') #22c55e
-            @elseif($order->status === 'cancelled') #ef4444
-            @elseif($order->status === 'washing') #3b82f6
-            @elseif($order->status === 'drying') #8b5cf6
-            @elseif($order->status === 'ready') #06b6d4
-            @else #6b7280
-            @endif
-        ;">
+        <span class="status-text status-{{ strtolower($order->status) }}">
             {{ $order->status === 'ready' ? 'Ready to Pick Up' : ucfirst($order->status) }}
         </span>
     </div>
@@ -66,8 +56,8 @@
     <div style="margin-top: 2rem; display:flex; gap:10px; flex-wrap:wrap;">
         <a href="{{ route('cashier.orders.index') }}" class="btn-secondary">← Back to Orders</a>
 
-        {{-- Mark as Complete button — only show if status is claimed --}}
-        @if($order->status === 'claimed')
+        {{-- Registered customer: claimed → Mark as Complete --}}
+        @if($order->status === 'claimed' && $order->customer_id)
         <form method="POST" action="{{ route('cashier.orders.complete', $order->order_id) }}">
             @csrf
             <button type="submit" class="btn-primary" style="background:#22c55e; border:none; cursor:pointer;"
@@ -75,7 +65,18 @@
                 Mark as Complete
             </button>
         </form>
+
+        {{-- Walk-in: ready → Done (one click complete) --}}
+        @elseif($order->status === 'ready' && !$order->customer_id)
+        <form method="POST" action="{{ route('cashier.orders.complete', $order->order_id) }}">
+            @csrf
+            <button type="submit" class="btn-primary" style="background:#22c55e; border:none; cursor:pointer;"
+                onclick="return confirm('Mark {{ $order->order_id }} as Done (Completed)?')">
+                Done
+            </button>
+        </form>
         @endif
+
     </div>
 </div>
 
