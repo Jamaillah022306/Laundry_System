@@ -486,7 +486,7 @@ class CashierController extends Controller
         $salesSummary = DB::select(
             "SELECT DATE(p.created_at) as date,
                     COUNT(p.id) as total_orders,
-                    SUM(CASE WHEN o.status = 'completed' THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN o.status IN ('completed', 'archived') THEN 1 ELSE 0 END) as completed,
                     SUM(p.amount) as revenue
              FROM payments p
              JOIN orders o ON p.order_id = o.order_id
@@ -527,7 +527,11 @@ class CashierController extends Controller
         )->total;
 
         $totalOrders = DB::selectOne("SELECT COUNT(*) as total FROM orders")->total;
-        $completed   = DB::selectOne("SELECT COUNT(*) as total FROM orders WHERE status = 'completed'")->total;
+
+        
+        $completed = DB::selectOne(
+            "SELECT COUNT(*) as total FROM orders WHERE status IN ('completed', 'archived')"
+        )->total;
 
         return compact('monthlyRevenue', 'totalOrders', 'completed', 'salesSummary', 'topServices', 'paymentMethods', 'topCustomers');
     }
