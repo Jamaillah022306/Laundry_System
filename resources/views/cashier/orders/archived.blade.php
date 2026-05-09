@@ -27,7 +27,7 @@
                     <td>{{ $order->service }}</td>
                     <td>{{ $order->weight }} kg</td>
                     <td>₱{{ number_format($order->amount, 2) }}</td>
-                    <td>{{ \Carbon\Carbon::parse($order->pickup_date)->format('M d, Y') }}</td>
+                    <td>{{ \Carbon\Carbon::parse($order->created_at)->format('M d, Y') }}</td>
                     <td>
                         <a href="{{ route('cashier.orders.show', $order->order_id) }}" class="btn-action">View</a>
                     </td>
