@@ -15,6 +15,12 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 Route::get('/forgot-password', function () { return view('auth.forgot-password'); })->name('password.request');
 
+// ⚠ TEMP DEBUG ROUTE - REMOVE AFTER CHECKING
+Route::get('/debug-orders', function () {
+    $orders = DB::select("SELECT order_id, customer_name, status, created_at, pickup_date FROM orders ORDER BY created_at DESC");
+    return response()->json($orders);
+});
+
 // CASHIER
 Route::prefix('cashier')->name('cashier.')->middleware(['auth', 'role:cashier'])->group(function () {
     Route::get('/dashboard', [CashierController::class, 'dashboard'])->name('dashboard');
