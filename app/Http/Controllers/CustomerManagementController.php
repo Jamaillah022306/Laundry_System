@@ -18,7 +18,7 @@ class CustomerManagementController extends Controller
             LEFT JOIN orders o ON u.id = o.customer_id
             WHERE u.role = 'customer'
             GROUP BY u.id, u.name, u.username, u.email, u.created_at
-            ORDER BY u.created_at DESC"
+            ORDER BY u.id ASC"
         );
 
         return view('cashier.customers.index', compact('customers'));
