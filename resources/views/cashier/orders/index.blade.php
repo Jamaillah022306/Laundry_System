@@ -72,7 +72,8 @@
                 <th>Weight</th>
                 <th>Amount</th>
                 <th>Status</th>
-                <th>Date</th>
+                <th>Order Date</th>
+                <th>Pick-up Date</th>
                 <th>Action</th>
             </tr>
         </thead>
@@ -89,11 +90,11 @@
                             {{ $order->status === 'ready' ? 'Ready to Pick Up' : ucfirst($order->status) }}
                         </span>
                     </td>
+                    <td>{{ \Carbon\Carbon::parse($order->created_at)->format('M d, Y') }}</td>
                     <td>{{ \Carbon\Carbon::parse($order->pickup_date)->format('M d, Y') }}</td>
                     <td style="display:flex; gap:6px; flex-wrap:wrap;">
 
                         @if($order->status === 'claimed' && !$order->customer_id)
-                            {{-- Walk-in claimed: one click Claimed & Complete --}}
                             <a href="{{ route('cashier.orders.show', $order->order_id) }}" class="btn-action">View</a>
                             <form method="POST" action="{{ route('cashier.orders.complete', $order->order_id) }}">
                                 @csrf
@@ -105,7 +106,6 @@
                             </form>
 
                         @elseif($order->status === 'claimed' && $order->customer_id)
-                            {{-- Registered customer claimed: show View + Complete --}}
                             <a href="{{ route('cashier.orders.show', $order->order_id) }}" class="btn-action">View</a>
                             <form method="POST" action="{{ route('cashier.orders.complete', $order->order_id) }}">
                                 @csrf
@@ -117,7 +117,6 @@
                             </form>
 
                         @elseif(in_array($order->status, ['completed', 'cancelled']))
-                            {{-- Completed/Cancelled: View + Archive --}}
                             <a href="{{ route('cashier.orders.show', $order->order_id) }}" class="btn-action">View</a>
                             <form method="POST" action="{{ route('cashier.orders.archive', $order->order_id) }}">
                                 @csrf
@@ -129,19 +128,16 @@
                             </form>
 
                         @elseif($order->status === 'ready' && !$order->customer_id)
-                            {{-- Walk-in ready: show Claimed & Complete button --}}
                             <a href="{{ route('cashier.orders.show', $order->order_id) }}" class="btn-action">View</a>
                             <form method="POST" action="{{ route('cashier.orders.complete', $order->order_id) }}"
                                 onsubmit="return confirm('Mark {{ $order->order_id }} as Claimed & Completed?')">
                                 @csrf
-                                {{-- We need to set claimed first then complete, use a dedicated route or just complete directly --}}
                                 <button type="submit" class="btn-action" style="background:#27ae60;">
                                     Done
                                 </button>
                             </form>
 
                         @else
-                            {{-- All other statuses: View + Update Status --}}
                             <a href="{{ route('cashier.orders.show', $order->order_id) }}" class="btn-action">View</a>
                             <button type="button" class="btn-action"
                                 style="background:#f39c12;"
@@ -154,7 +150,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="8" style="text-align:center; padding: 40px; color:#555;">No orders found.</td>
+                    <td colspan="9" style="text-align:center; padding: 40px; color:#555;">No orders found.</td>
                 </tr>
             @endforelse
         </tbody>

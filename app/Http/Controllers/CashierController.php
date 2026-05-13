@@ -483,13 +483,14 @@ class CashierController extends Controller
         $month = now()->month;
         $year  = now()->year;
 
+        // ✅ FIXED: Use o.amount for revenue based on completed/archived orders
+        //           instead of joining payments (which may be unpaid/missing)
         $salesSummary = DB::select(
             "SELECT DATE(o.created_at) as date,
                     COUNT(o.id) as total_orders,
                     SUM(CASE WHEN o.status IN ('completed', 'archived') THEN 1 ELSE 0 END) as completed,
-                    COALESCE(SUM(p.amount), 0) as revenue
+                    COALESCE(SUM(CASE WHEN o.status IN ('completed', 'archived') THEN o.amount ELSE 0 END), 0) as revenue
              FROM orders o
-             LEFT JOIN payments p ON o.order_id = p.order_id AND p.status = 'paid'
              GROUP BY DATE(o.created_at)
              ORDER BY DATE(o.created_at) DESC"
         );
