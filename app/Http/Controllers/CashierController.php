@@ -107,7 +107,7 @@ class CashierController extends Controller
             'service_id'         => 'required|exists:services,id',
             'laundry_type'       => 'required|string',
             'laundry_type_other' => 'nullable|string|max:255',
-            'weight'             => 'required|numeric|min:0.1',
+            'weight'             => 'required|numeric|min:7',  // ✅ Minimum 7 kg
             'pickup_date'        => 'required|date',
         ]);
 
