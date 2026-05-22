@@ -43,7 +43,7 @@
                         <tr>
                             <td>{{ $order->order_id }}</td>
                             <td>{{ $order->customer_name ?? 'Walk-in' }}</td>
-                            <td>{{ $order->service }}</td>
+                            <td>{{ str_replace('Self-Service ', '', $order->service) }}</td>
                             <td>
                                 <span class="status-text status-{{ strtolower($order->status) }}">
                                     {{ $order->status === 'ready' ? 'Ready to Pick Up' : ucfirst($order->status) }}

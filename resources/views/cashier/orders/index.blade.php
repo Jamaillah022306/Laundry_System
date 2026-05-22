@@ -21,17 +21,13 @@
                 <select name="status" id="statusSelect" required
                     style="width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:8px; font-size:14px;">
                     <option value="" disabled selected>Select Status</option>
-                    <option value="pending">Pending</option>
-                    <option value="washing">Washing</option>
-                    <option value="drying">Drying</option>
-                    <option value="ready">Ready to Pick Up</option>
-                    <option value="cancelled">Cancelled</option>
+                    {{-- Options are dynamically populated via JS based on service type --}}
                 </select>
             </div>
 
-            <div style="margin-bottom:8px;">
+            <div id="machineGroup" style="margin-bottom:8px; display:none;">
                 <label style="font-size:13px; font-weight:600; color:#444; display:block; margin-bottom:6px;">
-                    MACHINE <span id="machineLabel" style="font-weight:400; color:#888;">(optional)</span>:
+                    MACHINE <span id="machineLabel" style="font-weight:400; color:#888;">(select a washer)</span>:
                 </label>
                 <select name="machine_number" id="machineSelect"
                     style="width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:8px; font-size:14px;">
@@ -45,7 +41,10 @@
                         </option>
                     @endforeach
                 </select>
-                <p id="machineHint" style="font-size:12px; color:#888; margin-top:5px; display:none;"></p>
+                <p id="machineHint" style="font-size:12px; color:#888; margin-top:5px;"></p>
+                <p id="noMachineWarning" style="font-size:12px; color:#dc2626; margin-top:5px; display:none;">
+                    ⚠ No available machine found. Please make a machine available first.
+                </p>
             </div>
 
             <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
@@ -53,7 +52,7 @@
                     style="padding:10px 20px; background:#ccc; color:#333; border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer;">
                     Cancel
                 </button>
-                <button type="submit"
+                <button type="submit" id="modalSubmitBtn"
                     style="padding:10px 20px; background:#4a90d9; color:white; border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer;">
                     Update Status
                 </button>
@@ -82,7 +81,7 @@
                 <tr>
                     <td>{{ $order->order_id }}</td>
                     <td>{{ $order->customer_name ?? $order->customer->name ?? 'Walk-in' }}</td>
-                    <td>{{ $order->service }}</td>
+                    <td>{{ str_replace('Self-Service ', '', $order->service) }}</td>
                     <td>{{ $order->weight }} kg</td>
                     <td>₱{{ number_format($order->amount, 2) }}</td>
                     <td>
@@ -94,18 +93,7 @@
                     <td>{{ \Carbon\Carbon::parse($order->pickup_date)->format('M d, Y') }}</td>
                     <td style="display:flex; gap:6px; flex-wrap:wrap;">
 
-                        @if($order->status === 'claimed' && !$order->customer_id)
-                            <a href="{{ route('cashier.orders.show', $order->order_id) }}" class="btn-action">View</a>
-                            <form method="POST" action="{{ route('cashier.orders.complete', $order->order_id) }}">
-                                @csrf
-                                <button type="submit" class="btn-action"
-                                    style="background:#27ae60;"
-                                    onclick="return confirm('Mark {{ $order->order_id }} as completed?')">
-                                    Complete
-                                </button>
-                            </form>
-
-                        @elseif($order->status === 'claimed' && $order->customer_id)
+                        @if($order->status === 'claimed')
                             <a href="{{ route('cashier.orders.show', $order->order_id) }}" class="btn-action">View</a>
                             <form method="POST" action="{{ route('cashier.orders.complete', $order->order_id) }}">
                                 @csrf
@@ -141,7 +129,7 @@
                             <a href="{{ route('cashier.orders.show', $order->order_id) }}" class="btn-action">View</a>
                             <button type="button" class="btn-action"
                                 style="background:#f39c12;"
-                                onclick="openModal('{{ $order->order_id }}')">
+                                onclick="openModal('{{ $order->order_id }}', '{{ strtolower($order->service) }}')">
                                 Update Status
                             </button>
                         @endif
@@ -185,72 +173,132 @@
 </div>
 
 <script>
-function openModal(orderId) {
+function getStatusOptions(serviceName) {
+    const s = serviceName.toLowerCase();
+
+    if (s.includes('wash only') || (s.includes('wash') && !s.includes('dry') && !s.includes('wash & dry'))) {
+        return [
+            { value: 'washing',   label: 'Washing' },
+            { value: 'ready',     label: 'Ready to Pick Up' },
+            { value: 'cancelled', label: 'Cancelled' },
+        ];
+    } else if (s.includes('dry only')) {
+        return [
+            { value: 'drying',    label: 'Drying' },
+            { value: 'ready',     label: 'Ready to Pick Up' },
+            { value: 'cancelled', label: 'Cancelled' },
+        ];
+    } else {
+        return [
+            { value: 'washing',   label: 'Washing' },
+            { value: 'drying',    label: 'Drying' },
+            { value: 'ready',     label: 'Ready to Pick Up' },
+            { value: 'cancelled', label: 'Cancelled' },
+        ];
+    }
+}
+
+function openModal(orderId, serviceName) {
     document.getElementById('modalOrderId').textContent = orderId;
-    document.getElementById('modalOrderIdInput').value = orderId;
+    document.getElementById('modalOrderIdInput').value  = orderId;
 
-    document.getElementById('statusSelect').value = '';
-    document.getElementById('machineSelect').value = '';
-    filterMachines('');
+    // Reset status dropdown
+    const statusSelect = document.getElementById('statusSelect');
+    statusSelect.innerHTML = '<option value="" disabled selected>Select Status</option>';
+    const options = getStatusOptions(serviceName || '');
+    options.forEach(function(opt) {
+        const el = document.createElement('option');
+        el.value       = opt.value;
+        el.textContent = opt.label;
+        statusSelect.appendChild(el);
+    });
 
-    const modal = document.getElementById('statusModal');
-    modal.style.display = 'flex';
+    // Reset machine section
+    document.getElementById('machineGroup').style.display   = 'none';
+    document.getElementById('machineSelect').value          = '';
+    document.getElementById('machineSelect').required       = false;
+    document.getElementById('noMachineWarning').style.display = 'none';
+    document.getElementById('modalSubmitBtn').disabled      = false;
+    document.getElementById('modalSubmitBtn').style.background = '#4a90d9';
+
+    document.getElementById('statusModal').style.display = 'flex';
 }
 
 function closeModal() {
     document.getElementById('statusModal').style.display = 'none';
 }
 
+// Close modal when clicking backdrop
 document.getElementById('statusModal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
 });
 
-function filterMachines(status) {
-    const machineSelect = document.getElementById('machineSelect');
-    const machineHint   = document.getElementById('machineHint');
-    const machineLabel  = document.getElementById('machineLabel');
-    const options       = machineSelect.querySelectorAll('option');
-
-    machineSelect.value = '';
-
-    if (status === 'washing') {
-        options.forEach(opt => {
-            if (!opt.value) return;
-            const type    = opt.getAttribute('data-type');
-            const mStatus = opt.getAttribute('data-status');
-            opt.style.display = (type === 'washer') ? '' : 'none';
-            opt.disabled = (mStatus !== 'available');
-        });
-        machineHint.textContent = 'Only washers are shown for Washing status.';
-        machineHint.style.display = 'block';
-        machineLabel.textContent = '(select a washer)';
-
-    } else if (status === 'drying') {
-        options.forEach(opt => {
-            if (!opt.value) return;
-            const type    = opt.getAttribute('data-type');
-            const mStatus = opt.getAttribute('data-status');
-            opt.style.display = (type === 'dryer') ? '' : 'none';
-            opt.disabled = (mStatus !== 'available');
-        });
-        machineHint.textContent = 'Only dryers are shown for Drying status.';
-        machineHint.style.display = 'block';
-        machineLabel.textContent = '(select a dryer)';
-
-    } else {
-        options.forEach(opt => {
-            if (!opt.value) return;
-            opt.style.display = '';
-            opt.disabled = false;
-        });
-        machineHint.style.display = 'none';
-        machineLabel.textContent = '(optional)';
-    }
-}
-
+// Status change handler
 document.getElementById('statusSelect').addEventListener('change', function() {
     filterMachines(this.value);
 });
+
+function filterMachines(status) {
+    const machineGroup   = document.getElementById('machineGroup');
+    const machineSelect  = document.getElementById('machineSelect');
+    const machineHint    = document.getElementById('machineHint');
+    const machineLabel   = document.getElementById('machineLabel');
+    const noMachineWarn  = document.getElementById('noMachineWarning');
+    const submitBtn      = document.getElementById('modalSubmitBtn');
+    const options        = machineSelect.querySelectorAll('option[data-type]');
+
+    // Reset machine select
+    machineSelect.value = '';
+
+    if (status === 'washing' || status === 'drying') {
+        const neededType = status === 'washing' ? 'washer' : 'dryer';
+
+        // Show/hide options based on type AND availability
+        options.forEach(opt => {
+            const isMatch = opt.getAttribute('data-type') === neededType
+                         && opt.getAttribute('data-status') === 'available';
+            opt.hidden   = !isMatch;
+            opt.disabled = !isMatch;
+        });
+
+        // Update label/hint
+        machineLabel.textContent = status === 'washing' ? '(select a washer)' : '(select a dryer)';
+        machineHint.textContent  = status === 'washing'
+            ? 'Only available washers are shown for Washing status.'
+            : 'Only available dryers are shown for Drying status.';
+
+        machineGroup.style.display = 'block';
+
+        // Auto-select first available matching machine
+        const firstMatch = Array.from(options).find(opt => !opt.hidden && !opt.disabled);
+
+        if (firstMatch) {
+            machineSelect.value      = firstMatch.value;
+            machineSelect.required   = true;
+            noMachineWarn.style.display = 'none';
+            submitBtn.disabled       = false;
+            submitBtn.style.background = '#4a90d9';
+        } else {
+            // No available machine — block submission
+            machineSelect.required   = false;
+            noMachineWarn.style.display = 'block';
+            submitBtn.disabled       = true;
+            submitBtn.style.background = '#9ca3af';
+        }
+
+    } else {
+        // Non-machine statuses (ready, cancelled, etc.)
+        options.forEach(opt => {
+            opt.hidden   = false;
+            opt.disabled = false;
+        });
+        machineGroup.style.display      = 'none';
+        machineSelect.required          = false;
+        noMachineWarn.style.display     = 'none';
+        submitBtn.disabled              = false;
+        submitBtn.style.background      = '#4a90d9';
+    }
+}
 </script>
 
 @endsection

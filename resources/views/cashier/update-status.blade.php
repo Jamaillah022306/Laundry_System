@@ -67,9 +67,9 @@
                 @foreach($machines as $machine)
                     <option value="{{ $machine->machine_number }}"
                         data-type="{{ $machine->type }}"
+                        data-status="{{ $machine->status }}"
                         data-capacity="{{ $machine->capacity_kg }}"
-                        {{ old('machine_number') == $machine->machine_number ? 'selected' : '' }}
-                        {{ $machine->status == 'in_use' ? 'disabled' : '' }}>
+                        {{ old('machine_number') == $machine->machine_number ? 'selected' : '' }}>
                         {{ $machine->machine_number }} — {{ ucfirst($machine->type) }}
                         ({{ $machine->status == 'available' ? 'Available' : ($machine->status == 'in_use' ? 'In Use - ' . $machine->current_order_id : ucfirst($machine->status)) }})
                         — Max: {{ number_format($machine->capacity_kg, 1) }} kg
@@ -124,10 +124,8 @@
 </div>
 
 <script>
-// Store orders data from blade for JS use
-const ordersData = @json(
-    collect(DB::select("SELECT order_id, weight FROM orders"))->keyBy('order_id')
-);
+// FIX: Use $orders passed from controller instead of calling DB::select() in blade
+const ordersData = @json(collect($orders)->keyBy('order_id'));
 
 let currentOrderWeight = null;
 
@@ -156,37 +154,34 @@ function filterMachines() {
         machineGroup.style.display = 'block';
 
         options.forEach(option => {
-            const type = option.getAttribute('data-type');
-            const isMatch = (status === 'washing' && type === 'washer') ||
-                            (status === 'drying'  && type === 'dryer');
+            const type    = option.getAttribute('data-type');
+            const mStatus = option.getAttribute('data-status');
 
-            if (isMatch) {
-                option.style.display = 'block';
-                option.disabled = option.getAttribute('data-capacity') === null ? true : false;
+            const isRightType = (status === 'washing' && type === 'washer') ||
+                                (status === 'drying'  && type === 'dryer');
+
+            if (isRightType && mStatus === 'available') {
+                option.style.display = '';
+                option.disabled      = false;
+                option.hidden        = false;
             } else {
                 option.style.display = 'none';
-                option.disabled = true;
-                option.selected = false;
+                option.disabled      = true;
+                option.hidden        = true;
+                option.selected      = false;
             }
         });
 
-        // Re-disable in_use machines
-        @foreach($machines as $machine)
-            @if($machine->status == 'in_use')
-                const opt{{ $machine->id }} = document.querySelector(
-                    '#machine_number option[value="{{ $machine->machine_number }}"]'
-                );
-                if (opt{{ $machine->id }}) opt{{ $machine->id }}.disabled = true;
-            @endif
-        @endforeach
-
         // Auto-select first available matching machine
         const firstMatch = document.querySelector(
-            `#machine_number option[data-type]:not([disabled])`
+            '#machine_number option[data-type]:not([disabled]):not([hidden])'
         );
         if (firstMatch) {
             firstMatch.selected = true;
             checkCapacity();
+        } else {
+            document.getElementById('machine_number').value = '';
+            hideCapacityBanners();
         }
 
     } else {
@@ -198,7 +193,7 @@ function filterMachines() {
 }
 
 function checkCapacity() {
-    const select = document.getElementById('machine_number');
+    const select   = document.getElementById('machine_number');
     const selected = select.options[select.selectedIndex];
 
     if (!selected || !selected.getAttribute('data-capacity')) {
@@ -207,7 +202,7 @@ function checkCapacity() {
         return;
     }
 
-    const capacity = parseFloat(selected.getAttribute('data-capacity'));
+    const capacity    = parseFloat(selected.getAttribute('data-capacity'));
     const machineName = selected.value;
 
     if (currentOrderWeight === null) {
@@ -217,19 +212,17 @@ function checkCapacity() {
     }
 
     if (currentOrderWeight > capacity) {
-        // BLOCK — show warning
         const excess = (currentOrderWeight - capacity).toFixed(2);
         document.getElementById('capacity_warning_text').textContent =
             `${machineName} max capacity is ${capacity.toFixed(1)} kg, but this order is ${currentOrderWeight.toFixed(2)} kg (exceeds by ${excess} kg).`;
         document.getElementById('capacity_warning').style.display = 'block';
-        document.getElementById('capacity_ok').style.display = 'none';
+        document.getElementById('capacity_ok').style.display      = 'none';
         blockSubmit();
     } else {
-        // OK — show green confirmation
         const remaining = (capacity - currentOrderWeight).toFixed(2);
         document.getElementById('capacity_ok_text').textContent =
             `${machineName} can handle this order. (${currentOrderWeight.toFixed(2)} kg / ${capacity.toFixed(1)} kg — ${remaining} kg remaining)`;
-        document.getElementById('capacity_ok').style.display = 'block';
+        document.getElementById('capacity_ok').style.display      = 'block';
         document.getElementById('capacity_warning').style.display = 'none';
         enableSubmit();
     }
@@ -237,7 +230,7 @@ function checkCapacity() {
 
 function hideCapacityBanners() {
     document.getElementById('capacity_warning').style.display = 'none';
-    document.getElementById('capacity_ok').style.display = 'none';
+    document.getElementById('capacity_ok').style.display      = 'none';
 }
 
 function blockSubmit() {

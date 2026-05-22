@@ -242,7 +242,7 @@
         <div class="slip-body">
             <div class="slip-row">
                 <span class="label">Customer</span>
-                <span class="value">{{ $order->customer_name ?? 'Walk-in' }}</span>
+                <span class="value">{{ $order->display_name ?? $order->customer_name ?? 'Walk-in' }}</span>
             </div>
             <div class="slip-row">
                 <span class="label">Service</span>
@@ -266,20 +266,13 @@
             </div>
         </div>
 
-        {{-- PRICE BREAKDOWN BOX --}}
-        @php
-            $pricePerKg = $order->amount / $order->weight;
-        @endphp
+        {{-- ✅ FIXED: Price Breakdown — show estimated amount, no more wrong price_per_kg computation --}}
         <div class="price-breakdown">
             <div class="breakdown-title">Price Breakdown</div>
 
             <div class="breakdown-row">
                 <span class="bd-label">Service</span>
                 <span class="bd-value">{{ $order->service }}</span>
-            </div>
-            <div class="breakdown-row">
-                <span class="bd-label">Price per kg</span>
-                <span class="bd-value">₱{{ number_format($pricePerKg, 2) }}</span>
             </div>
             <div class="breakdown-row">
                 <span class="bd-label">Weight</span>
@@ -289,8 +282,14 @@
             <hr class="breakdown-divider">
 
             <div class="breakdown-row total-row">
-                <span class="bd-label">₱{{ number_format($pricePerKg, 2) }} × {{ $order->weight }} kg</span>
+                <span class="bd-label">Estimated Amount</span>
                 <span class="bd-value">= ₱{{ number_format($order->amount, 2) }}</span>
+            </div>
+
+            <div class="breakdown-row" style="margin-top:6px;">
+                <span class="bd-label" style="font-size:11px; color:#6b7280; font-style:italic;">
+                    ⓘ Final amount may vary based on actual load count. Payment collected upon pick-up.
+                </span>
             </div>
         </div>
 
@@ -301,7 +300,8 @@
 
         <div class="slip-note">
             <strong>Important Reminder:</strong>
-            Please keep this slip and present your <strong>Order ID ({{ $order->order_id }})</strong> when claiming your laundry. Payment will be collected upon pick-up.
+            Please keep this slip and present your <strong>Order ID ({{ $order->order_id }})</strong>
+            when claiming your laundry. Payment will be collected upon pick-up.
         </div>
 
         <div class="slip-footer">

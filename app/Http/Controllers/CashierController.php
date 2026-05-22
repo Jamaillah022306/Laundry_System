@@ -49,7 +49,6 @@ class CashierController extends Controller
              LIMIT 5"
         );
 
-        // ===== AUTO-FLAG OVERDUE MACHINES AS UNDER MAINTENANCE =====
         DB::update(
             "UPDATE machines 
              SET status = 'under_maintenance', maintenance_note = 'Auto: Scheduled maintenance due. Please inspect before use.'
@@ -107,12 +106,14 @@ class CashierController extends Controller
             'service_id'         => 'required|exists:services,id',
             'laundry_type'       => 'required|string',
             'laundry_type_other' => 'nullable|string|max:255',
-            'weight'             => 'required|numeric|min:7',  // ✅ Minimum 7 kg
+            'weight'             => 'required|numeric|min:1',
             'pickup_date'        => 'required|date',
+            'amount'             => 'required|numeric|min:0',
         ]);
 
         $service = DB::selectOne("SELECT * FROM services WHERE id = ?", [$validated['service_id']]);
-        $amount  = $service->price_per_kg * $validated['weight'];
+
+        $amount = $validated['amount'];
 
         $customerId = null;
         if ($request->customer_id && $request->customer_id !== 'walk_in') {
@@ -129,7 +130,7 @@ class CashierController extends Controller
         $nextNum   = $lastOrder ? (intval(substr($lastOrder->order_id, 4)) + 1) : 1;
         $orderId   = 'ORD-' . str_pad($nextNum, 3, '0', STR_PAD_LEFT);
 
-        $laundryType = $validated['laundry_type'];
+        $laundryType      = $validated['laundry_type'];
         $laundryTypeOther = ($laundryType === 'others') ? ($validated['laundry_type_other'] ?? null) : null;
 
         DB::insert(
@@ -150,6 +151,11 @@ class CashierController extends Controller
 
         if ($customerId) {
             Notification::sendTo($customerId, "Your order {$orderId} has been placed! Service: {$service->service_name}. We'll notify you of updates.", $orderId);
+        }
+
+        if ($customerId) {
+            return redirect()->route('cashier.orders.show', $orderId)
+                             ->with('success', "Order {$orderId} placed successfully!");
         }
 
         return redirect()->route('cashier.orders.claim-slip', $orderId);
@@ -234,93 +240,134 @@ class CashierController extends Controller
     public function updateStatus()
     {
         $machines = DB::select("SELECT * FROM machines ORDER BY machine_number");
-        return view('cashier.update-status', compact('machines'));
+        $orders   = DB::select("SELECT order_id, weight FROM orders");
+
+        return view('cashier.update-status', compact('machines', 'orders'));
     }
 
     public function updateStatusStore(Request $request)
     {
-        $request->validate([
-            'order_id'       => 'required|string|exists:orders,order_id',
-            'status'         => 'required|in:pending,washing,drying,ready,claimed,completed,cancelled',
-            'machine_number' => 'nullable|string',
-        ]);
+        \Log::info('UPDATE STATUS CALLED', $request->all());
 
-        $order = DB::selectOne("SELECT * FROM orders WHERE order_id = ?", [$request->order_id]);
-        abort_if(!$order, 404);
+        try {
+            $request->validate([
+                'order_id'       => 'required|string|exists:orders,order_id',
+                'status'         => 'required|in:pending,washing,drying,ready,claimed,completed,cancelled',
+                'machine_number' => 'nullable|string',
+            ]);
 
-        // ===== CAPACITY CHECK: before assigning machine =====
-        if ($request->machine_number && in_array($request->status, ['washing', 'drying'])) {
-            $machine = DB::selectOne(
-                "SELECT * FROM machines WHERE machine_number = ?",
-                [$request->machine_number]
-            );
+            \Log::info('STEP 1 - VALIDATION PASSED');
 
-            if ($machine && $order->weight > $machine->capacity_kg) {
-                return back()->withErrors([
-                    'machine_number' => "⚠ The order weight ({$order->weight} kg) exceeds the capacity of {$machine->machine_number} ({$machine->capacity_kg} kg). Please split the order or choose a larger machine."
-                ])->withInput();
-            }
-        }
+            $order = DB::selectOne("SELECT * FROM orders WHERE order_id = ?", [$request->order_id]);
+            abort_if(!$order, 404);
 
-        $washingAt = $request->status === 'washing'   ? now() : $order->washing_at;
-        $readyAt   = $request->status === 'ready'     ? now() : $order->ready_at;
-        $claimedAt = $request->status === 'completed' ? now() : $order->claimed_at;
+            \Log::info('STEP 2 - ORDER FOUND', ['order_id' => $order->order_id]);
 
-        DB::update(
-            "UPDATE orders SET status = ?, washing_at = ?, ready_at = ?, claimed_at = ?, updated_at = NOW() WHERE order_id = ?",
-            [$request->status, $washingAt, $readyAt, $claimedAt, $request->order_id]
-        );
-
-        $terminalStatuses = ['ready', 'completed', 'cancelled'];
-
-        if (in_array($request->status, $terminalStatuses)) {
-            DB::update(
-                "UPDATE machines SET status = 'available', current_order_id = NULL WHERE current_order_id = ?",
-                [$request->order_id]
-            );
-        } else {
-            if ($request->machine_number) {
-                $newMachine = DB::selectOne(
+            // Capacity check
+            if ($request->machine_number && in_array($request->status, ['washing', 'drying'])) {
+                $machine = DB::selectOne(
                     "SELECT * FROM machines WHERE machine_number = ?",
                     [$request->machine_number]
                 );
 
-                if ($newMachine) {
-                    if ($order->machine_id && $order->machine_id != $newMachine->id) {
-                        DB::update(
-                            "UPDATE machines SET status = 'available', current_order_id = NULL WHERE id = ?",
-                            [$order->machine_id]
-                        );
-                    }
-
-                    DB::update(
-                        "UPDATE orders SET machine_id = ? WHERE order_id = ?",
-                        [$newMachine->id, $request->order_id]
-                    );
-
-                    DB::update(
-                        "UPDATE machines SET status = 'in_use', current_order_id = ? WHERE id = ?",
-                        [$request->order_id, $newMachine->id]
-                    );
+                if ($machine && $order->weight > $machine->capacity_kg) {
+                    return back()->withErrors([
+                        'machine_number' => "⚠ The order weight ({$order->weight} kg) exceeds the capacity of {$machine->machine_number} ({$machine->capacity_kg} kg). Please split the order or choose a larger machine."
+                    ])->withInput();
                 }
             }
-        }
 
-        if ($order->customer_id) {
-            $messages = [
-                'washing'   => "Your order {$order->order_id} is now being washed!",
-                'drying'    => "Your order {$order->order_id} is now being dried!",
-                'ready'     => "Your order {$order->order_id} is ready for pick-up!",
-                'completed' => "Your order {$order->order_id} has been completed. Thank you!",
-                'cancelled' => "Your order {$order->order_id} has been cancelled.",
-            ];
-            if (isset($messages[$request->status])) {
-                Notification::sendTo($order->customer_id, $messages[$request->status], $order->order_id);
+            // ✅ FIX: Use null-safe ?? so missing columns don't throw an error
+            $washingAt = $request->status === 'washing'   ? now()->toDateTimeString() : ($order->washing_at   ?? null);
+            $readyAt   = $request->status === 'ready'     ? now()->toDateTimeString() : ($order->ready_at     ?? null);
+            $claimedAt = $request->status === 'completed' ? now()->toDateTimeString() : ($order->claimed_at   ?? null);
+
+            \Log::info('STEP 3 - ABOUT TO UPDATE ORDER STATUS');
+
+            DB::update(
+                "UPDATE orders SET status = ?, updated_at = NOW() WHERE order_id = ?",
+                [$request->status, $request->order_id]
+            );
+                
+            \Log::info('STEP 4 - ORDER STATUS UPDATED');
+
+            $terminalStatuses = ['ready', 'completed', 'cancelled'];
+
+            if (in_array($request->status, $terminalStatuses)) {
+                DB::update(
+                    "UPDATE orders SET machine_id = NULL, machine_number = NULL, updated_at = NOW() WHERE order_id = ?",
+                    [$request->order_id]
+                );
+                DB::update(
+                    "UPDATE machines SET status = 'available', current_order_id = NULL WHERE current_order_id = ?",
+                    [$request->order_id]
+                );
+            } else {
+                if ($request->machine_number) {
+                    $newMachine = DB::selectOne(
+                        "SELECT * FROM machines WHERE machine_number = ?",
+                        [$request->machine_number]
+                    );
+
+                    \Log::info('STEP 5 - MACHINE LOOKUP', [
+                        'machine_number' => $request->machine_number,
+                        'found'          => $newMachine ? $newMachine->machine_number : 'NOT FOUND',
+                    ]);
+
+                    if ($newMachine) {
+                        if ($order->machine_id && $order->machine_id != $newMachine->id) {
+                            DB::update(
+                                "UPDATE machines SET status = 'available', current_order_id = NULL WHERE id = ?",
+                                [$order->machine_id]
+                            );
+                        }
+
+                        DB::update(
+                            "UPDATE orders SET machine_id = ?, machine_number = ?, updated_at = NOW() WHERE order_id = ?",
+                            [$newMachine->id, $newMachine->machine_number, $request->order_id]
+                        );
+
+                        \Log::info('STEP 6 - ORDER MACHINE UPDATED');
+
+                        DB::update(
+                            "UPDATE machines SET status = 'in_use', current_order_id = ?, updated_at = NOW() WHERE id = ?",
+                            [$request->order_id, $newMachine->id]
+                        );
+
+                        \Log::info('STEP 7 - MACHINE SET TO IN_USE');
+                    }
+                }
             }
-        }
 
-        return redirect()->route('cashier.orders.index')
-                         ->with('success', "Order {$order->order_id} status updated to " . ucfirst($request->status) . "!");
+            if ($order->customer_id) {
+                $messages = [
+                    'washing'   => "Your order {$order->order_id} is now being washed!",
+                    'drying'    => "Your order {$order->order_id} is now being dried!",
+                    'ready'     => "Your order {$order->order_id} is ready for pick-up!",
+                    'completed' => "Your order {$order->order_id} has been completed. Thank you!",
+                    'cancelled' => "Your order {$order->order_id} has been cancelled.",
+                ];
+                if (isset($messages[$request->status])) {
+                    Notification::sendTo($order->customer_id, $messages[$request->status], $order->order_id);
+                }
+            }
+
+            \Log::info('STEP 8 - ALL DONE');
+
+            return redirect()->route('cashier.orders.index')
+                             ->with('success', "Order {$order->order_id} status updated to " . ucfirst($request->status) . "!");
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('VALIDATION ERROR', ['errors' => $e->errors()]);
+            throw $e;
+        } catch (\Exception $e) {
+            \Log::error('UPDATE STATUS ERROR', [
+                'message' => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => basename($e->getFile()),
+            ]);
+            return back()->with('error', 'Error: ' . $e->getMessage());
+        }
     }
 
     public function machines()
@@ -349,8 +396,8 @@ class CashierController extends Controller
 
         $newStatus = $machine->status === 'under_maintenance' ? 'available' : 'under_maintenance';
 
-        $lastMaintained = $newStatus === 'available' ? now() : $machine->last_maintained_at;
-        $maintenanceDue = $newStatus === 'available' ? now()->addDays(30) : $machine->maintenance_due_at;
+        $lastMaintained = $newStatus === 'available' ? now()->toDateTimeString() : $machine->last_maintained_at;
+        $maintenanceDue = $newStatus === 'available' ? now()->addDays(30)->toDateTimeString() : $machine->maintenance_due_at;
 
         DB::update(
             "UPDATE machines SET status = ?, maintenance_note = ?, last_maintained_at = ?, maintenance_due_at = ?, updated_at = NOW() WHERE id = ?",
@@ -410,7 +457,6 @@ class CashierController extends Controller
         return view('cashier.payments.index', compact('payments'));
     }
 
-    // ✅ FIXED: Added COALESCE(u.name, o.customer_name, 'Walk-in') so customer name shows correctly
     public function paymentShow($id)
     {
         $payment = DB::selectOne(
@@ -477,14 +523,11 @@ class CashierController extends Controller
         return redirect()->route('cashier.payments.index')->with('success', "Payment {$id} marked as paid!");
     }
 
-    // ===== REPORTS =====
     private function getReportData(): array
     {
         $month = now()->month;
         $year  = now()->year;
 
-        // ✅ FIXED: Use o.amount for revenue based on completed/archived orders
-        //           instead of joining payments (which may be unpaid/missing)
         $salesSummary = DB::select(
             "SELECT DATE(o.created_at) as date,
                     COUNT(o.id) as total_orders,
@@ -528,7 +571,6 @@ class CashierController extends Controller
 
         $totalOrders = DB::selectOne("SELECT COUNT(*) as total FROM orders")->total;
 
-        // ✅ FIXED: Include 'archived' orders in completed count
         $completed = DB::selectOne(
             "SELECT COUNT(*) as total FROM orders WHERE status IN ('completed', 'archived')"
         )->total;

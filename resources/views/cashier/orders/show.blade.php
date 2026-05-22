@@ -22,7 +22,7 @@
     </div>
     <div style="display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.2);">
         <span style="font-weight:700; color:#1a1a2e;">Service</span>
-        <span>{{ $order->service }}</span>
+        <span>{{ str_replace('Self-Service ', '', $order->service) }}</span>
     </div>
     <div style="display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.2);">
         <span style="font-weight:700; color:#1a1a2e;">Weight</span>
